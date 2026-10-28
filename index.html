@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!--
+    Content security policy: the page may only run its own scripts and may only
+    talk to Google's Calendar API. Nothing else can load or be contacted.
+  -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src data:; connect-src https://www.googleapis.com; base-uri 'none'; form-action 'none'">
+  <title>Athletics Calendar</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip" href="#calendar">Skip to calendar</a>
+
+  <header class="masthead">
+    <h1 id="pageTitle">Athletics Calendar</h1>
+    <p id="introText" class="intro"></p>
+  </header>
+
+  <noscript>
+    <p class="notice">This calendar needs JavaScript. You can still subscribe to any team from the
+      <a href="links.html">plain list of subscribe links</a>.</p>
+  </noscript>
+
+  <div class="layout">
+    <aside class="filters" aria-label="Choose what to show">
+      <details id="filterPanel" open>
+        <summary>Teams and events</summary>
+
+        <fieldset class="show">
+          <legend>Show</legend>
+          <label class="opt"><input type="radio" name="type" value="games"> Games and matches only</label>
+          <label class="opt"><input type="radio" name="type" value="all"> Games, practices and meetings</label>
+        </fieldset>
+
+        <div class="teams-head">
+          <h2>Teams</h2>
+          <span class="quick">
+            <button type="button" class="link" id="selectAll">Select all</button>
+            <button type="button" class="link" id="clearAll">Clear</button>
+          </span>
+        </div>
+        <div id="teamList"></div>
+      </details>
+    </aside>
+
+    <main class="stage">
+      <div class="actions">
+        <p id="summary" class="summary" aria-live="polite"></p>
+        <div class="buttons">
+          <button type="button" id="subscribeBtn" class="primary">Subscribe</button>
+          <button type="button" id="printBtn">Print</button>
+        </div>
+      </div>
+
+      <div id="status" class="status" role="status" aria-live="polite"></div>
+
+      <div id="printHeader" class="print-only"></div>
+      <div id="calendar"></div>
+    </main>
+  </div>
+
+  <footer class="foot">
+    <p id="contact"></p>
+    <p id="footerNote"></p>
+    <p class="plain-links"><a href="links.html">All subscribe links as a plain list</a></p>
+  </footer>
+
+  <dialog id="subscribeDialog" aria-labelledby="subTitle">
+    <div class="dlg-head">
+      <h2 id="subTitle">Subscribe</h2>
+      <button type="button" class="close" data-close aria-label="Close">Close</button>
+    </div>
+    <fieldset class="show">
+      <legend>Subscribe to</legend>
+      <label class="opt"><input type="radio" name="subType" value="games"> Games and matches only</label>
+      <label class="opt"><input type="radio" name="subType" value="all"> Games, practices and meetings</label>
+    </fieldset>
+    <p class="hint">Subscribed calendars update on your calendar app's own schedule, which can take several hours.
+      This page always shows the latest schedule.</p>
+    <div id="subList"></div>
+  </dialog>
+
+  <dialog id="eventDialog" aria-labelledby="evTitle">
+    <div class="dlg-head">
+      <h2 id="evTitle"></h2>
+      <button type="button" class="close" data-close aria-label="Close">Close</button>
+    </div>
+    <div id="evBody"></div>
+  </dialog>
+
+  <script src="vendor/fullcalendar.min.js"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
