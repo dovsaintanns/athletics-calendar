@@ -12,7 +12,8 @@ A single static page: no server, no database, no logins. It reads the teams' **p
 | `config.js` | **The file you edit.** API key, page wording, and the team list with calendar IDs. |
 | `styles.css` | Look, small-screen layout, print layout. |
 | `vendor/fullcalendar.min.js` | FullCalendar 6.1.22, copied locally so no third-party script loads at runtime. |
-| `links.html` | Plain list of every subscribe link with no JavaScript. This is the fallback if the viewer is ever down. Rebuild it with `node tools/make-links.js` after editing `config.js`. |
+| `links.html` | Plain list of every subscribe link with no JavaScript. This is the fallback if the viewer is ever down. Generated together with `config.js`; always replace the two as a pair. |
+| `admin-tools/ExportSiteConfig.gs` | Apps Script for the admin Sheet. Adds Site tools > Export site config, which produces `config.js` and `links.html`. Not part of the public site. |
 
 ## 1. Get a Google Calendar API key (about 5 minutes)
 
@@ -37,11 +38,24 @@ The key is visible to anyone who views the page source. That is normal for this 
 
 With no API key set, the page runs in **preview mode** with clearly labelled sample events, so you can show the layout before the key exists.
 
-## 3. Day-to-day changes
+## 3. Day-to-day changes (teams, calendar IDs, wording)
 
-- Turn a team on or off: change `active: true/false` in `config.js`.
-- Rename a team or change wording: edit `config.js`.
-- Then run `node tools/make-links.js` so `links.html` matches.
+The admin console Sheet is the control panel. `config.js` and `links.html` are both generated from it, together.
+
+1. Edit the **Teams** or **Settings** tab in the Sheet (tick or untick Active, add a team, paste a calendar ID, and so on).
+2. In the Sheet, choose **Site tools > Export site config**. It checks for mistakes (bad or duplicate IDs, a calendar that is not public, an unknown default team) and, if all is well, shows both files with Copy and Download buttons.
+3. Replace **both** `config.js` and `links.html` in the site folder with the new versions.
+4. Publish: on GitHub Pages, commit and push (GitHub Desktop: Commit, then Push origin). Elsewhere, upload the two files.
+
+Do not hand-edit either file; the next export overwrites them. The exporter is in `admin-tools/ExportSiteConfig.gs`, with setup steps at the top.
+
+## Moving to another host (WordPress server, school web host, etc.)
+
+The site is plain files with no build step and no server code. To move it, copy `index.html`, `app.js`, `config.js`, `styles.css`, `links.html` and the `vendor` folder to the new host, keeping the folder structure. From then on, an update is just replacing `config.js` and `links.html`.
+
+- Link or embed the page (for example in an iframe) from the WordPress site rather than pasting it into a post; a pasted copy would not carry the security policy in `index.html`.
+- Add the new site's address to the API key's website restrictions in Google Cloud.
+- Nothing in the page depends on GitHub.
 
 ## Check before showing it around
 
