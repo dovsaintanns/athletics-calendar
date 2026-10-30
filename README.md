@@ -49,6 +49,16 @@ The admin console Sheet is the control panel. `config.js` and `links.html` are b
 
 Do not hand-edit either file; the next export overwrites them. The exporter is in `admin-tools/ExportSiteConfig.gs`, with setup steps at the top.
 
+## How teams are grouped and ordered
+
+The export groups teams into **High School** (Varsity, JV) and **Middle School** (6th, 7th, 8th, or "Middle School" in the name), then by sport. If a name does not say which, the team lands under **Other** and the export warns you. To override any team, add a column headed **Division** (or "Division (optional)") to the Teams tab and type High School, Middle School, or your own label; that always wins over the name.
+
+Order is: High School, Middle School, anything else; sports A to Z within a division; boys, then girls; then Varsity, JV, 6th, 7th, 8th, 7th/8th. The order is written into `config.js`, so the page and `links.html` always agree.
+
+## Views on the page
+
+List (a month at a time), Week (a time grid on computers, a list on phones), Month, Full schedule (about a year ahead), and Date range (pick any two dates, handy for printing a stretch of the season). Every view works with the Subscribe and Print buttons, and the page address records the selection so a link opens the same view.
+
 ## Moving to another host (WordPress server, school web host, etc.)
 
 The site is plain files with no build step and no server code. To move it, copy `index.html`, `app.js`, `config.js`, `styles.css`, `links.html` and the `vendor` folder to the new host, keeping the folder structure. From then on, an update is just replacing `config.js` and `links.html`.

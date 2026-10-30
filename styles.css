@@ -91,14 +91,14 @@ fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 .show legend, .teams-head h2 { font-size: .95rem; font-weight: 600; margin: 0; padding: 0; }
 .show legend { margin-bottom: .25rem; }
 
-.opt, .team, .group-head {
+.opt, .team, .group-label {
   display: flex;
   align-items: center;
   gap: .55rem;
   padding: .3rem 0;
   cursor: pointer;
 }
-.opt input, .team input, .group-head input {
+.opt input, .team input, .group-label input {
   width: 1.1rem; height: 1.1rem; margin: 0; accent-color: var(--accent); flex: none;
 }
 
@@ -106,7 +106,22 @@ fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 .quick { display: flex; gap: .85rem; }
 
 .group { margin: .5rem 0 .75rem; }
-.group-head { font-weight: 600; border-bottom: 1px solid var(--line); padding-bottom: .35rem; margin-bottom: .15rem; }
+.group-head { display: flex; align-items: center; gap: .5rem; border-bottom: 1px solid var(--line); margin-bottom: .15rem; }
+.group-label { flex: 1; min-width: 0; font-weight: 600; }
+.group-head .twisty {
+  display: flex; align-items: center; gap: .45rem; flex: none;
+  border: 0; background: none; padding: .35rem .25rem; margin: 0;
+  color: var(--muted); font-size: .85rem; font-weight: 400;
+}
+.group-head .twisty:hover { background: none; color: var(--ink); }
+.chev {
+  width: .5rem; height: .5rem; flex: none; margin-top: -.15rem;
+  border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg); transition: transform .15s;
+}
+.twisty[aria-expanded="true"] .chev { transform: rotate(45deg); margin-top: -.2rem; }
+.collapse-row { margin: 0 0 .25rem; text-align: right; }
+@media (prefers-reduced-motion: reduce) { .chev { transition: none; } }
 .team { padding-left: .25rem; }
 
 .swatch { width: .8rem; height: .8rem; border-radius: 50%; flex: none; display: inline-block; }
@@ -192,6 +207,46 @@ button.link, button.link:hover { background: none; border: 0; padding: 0; font-w
 .ev-title { display: block; font-weight: 600; }
 .ev-team { display: block; font-size: .85rem; color: var(--muted); }
 
+/* ---------- divisions, group tools ---------- */
+
+.division + .division { margin-top: 1rem; }
+.division-head {
+  display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: .1rem .75rem;
+  margin: .6rem 0 .25rem; padding-top: .45rem; border-top: 2px solid var(--accent);
+}
+.division-head h3 {
+  margin: 0; font-size: .85rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--accent);
+}
+.division-head .quick, .group-tools .quick { gap: .85rem; }
+.division-head button.link, .group-tools button.link { font-size: .85rem; }
+.group-tools { padding: .1rem 0 .15rem .25rem; }
+
+/* ---------- view bar and date range ---------- */
+
+.viewbar { display: flex; flex-wrap: wrap; gap: .4rem; margin: 0 0 .75rem; }
+.viewbar button { padding: .4rem .85rem; font-size: .9rem; }
+.viewbar button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+.viewbar button[aria-pressed="true"]:hover { background: var(--accent); filter: brightness(1.15); }
+
+.range {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1.25rem;
+  padding: .6rem .85rem; margin: 0 0 .75rem; background: var(--wash); border-radius: var(--radius);
+}
+.range[hidden] { display: none; }
+.range label { display: flex; align-items: center; gap: .5rem; font-weight: 600; font-size: .95rem; }
+.range input { font: inherit; font-weight: 400; padding: .3rem .45rem; border: 1.5px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--ink); }
+.range-msg { color: var(--problem-ink); font-size: .9rem; }
+
+#calendar.is-range .fc-prev-button,
+#calendar.is-range .fc-next-button,
+#calendar.is-range .fc-today-button { display: none; }
+
+#calendar .fc-timegrid-event { overflow: hidden; }
+.evg { display: block; line-height: 1.25; overflow: hidden; padding: 1px 3px; overflow-wrap: anywhere; }
+.evg-time { display: block; font-size: .72rem; opacity: .92; white-space: nowrap; }
+.evg-title { display: block; font-weight: 600; font-size: .8rem; }
+.evg-team { display: block; font-size: .7rem; opacity: .92; }
+
 /* ---------- dialogs ---------- */
 
 dialog {
@@ -239,13 +294,14 @@ input.manual { font: inherit; font-size: .85rem; padding: .4rem .5rem; width: 10
 
 @media print {
   body { font-size: 11pt; color: #000; }
-  .skip, .masthead, .filters, .actions, .status, .plain-links, noscript, dialog,
+  .skip, .masthead, .filters, .actions, .status, .viewbar, .range, .plain-links, noscript, dialog,
   #calendar .fc-toolbar { display: none !important; }
   .layout { display: block; padding: 0; max-width: none; }
   .print-only { display: block; margin-bottom: .75rem; border-bottom: 2px solid #000; padding-bottom: .5rem; }
   .print-only h2 { margin: 0 0 .25rem; font-family: var(--serif); font-size: 18pt; }
   .print-only p { margin: .1rem 0; font-size: 10pt; }
   .print-only .p-teams { font-weight: 600; font-size: 11pt; }
+  .print-only .p-range { font-weight: 600; font-size: 11pt; }
   #calendar { --fc-border-color: #888; --fc-today-bg-color: transparent; }
   #calendar .fc-list-day th { background: #eee !important; }
   #calendar .fc-list-event, #calendar .fc-list-day { break-inside: avoid; }

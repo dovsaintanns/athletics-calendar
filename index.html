@@ -40,9 +40,10 @@
           <h2>Teams</h2>
           <span class="quick">
             <button type="button" class="link" id="selectAll">Select all</button>
-            <button type="button" class="link" id="clearAll">Clear</button>
+            <button type="button" class="link" id="clearAll">Select none</button>
           </span>
         </div>
+        <p class="collapse-row"><button type="button" class="link" id="toggleGroups">Collapse all</button></p>
         <div id="teamList"></div>
       </details>
     </aside>
@@ -57,6 +58,19 @@
       </div>
 
       <div id="status" class="status" role="status" aria-live="polite"></div>
+
+      <div id="viewbar" class="viewbar" role="group" aria-label="Calendar view">
+        <button type="button" data-view="list" aria-pressed="false">List</button>
+        <button type="button" data-view="week" aria-pressed="false">Week</button>
+        <button type="button" data-view="month" aria-pressed="false">Month</button>
+        <button type="button" data-view="full" aria-pressed="false">Full schedule</button>
+        <button type="button" data-view="range" aria-pressed="false">Date range</button>
+      </div>
+      <div id="rangeBox" class="range" hidden>
+        <label>From <input type="date" id="rangeFrom"></label>
+        <label>To <input type="date" id="rangeTo"></label>
+        <span id="rangeMsg" class="range-msg" role="status"></span>
+      </div>
 
       <div id="printHeader" class="print-only"></div>
       <div id="calendar"></div>

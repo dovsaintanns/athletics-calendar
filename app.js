@@ -23,8 +23,9 @@
   var PALETTE = ['#1f5f8b', '#a23b72', '#2e7d32', '#b34a12', '#6a4c93', '#00796b',
                  '#9c2f2f', '#5d6d1f', '#3b4a9e', '#8d5a00', '#455a64', '#ad1457'];
 
-  var VIEW_FROM_SHORT = { list: 'listMonth', month: 'dayGridMonth', full: 'listFull' };
-  var VIEW_TO_SHORT = { listMonth: 'list', dayGridMonth: 'month', listFull: 'full' };
+  var VIEW_FROM_SHORT = { list: 'listMonth', week: 'timeGridWeek', month: 'dayGridMonth', full: 'listFull', range: 'listRange' };
+  var VIEW_TO_SHORT = { listMonth: 'list', timeGridWeek: 'week', listWeek: 'week', dayGridMonth: 'month', listFull: 'full', listRange: 'range' };
+  var YMD = /^\d{4}-\d{2}-\d{2}$/;
 
   var teams = [];
   C.teams.forEach(function (t, i) {
@@ -57,6 +58,17 @@
   // Calendar times are shown as the school's wall-clock time, wherever the visitor is.
   function floating(s) { return s.replace(/(Z|[+-]\d{2}:\d{2})$/, ''); }
 
+  function isNarrow() { return window.matchMedia('(max-width: 800px)').matches; }
+
+  function ymd(d) { return d.toISOString().slice(0, 10); }
+
+  function addDays(day, n) {
+    var p = day.split('-');
+    return ymd(new Date(Date.UTC(+p[0], +p[1] - 1, +p[2] + n)));
+  }
+
+  function todayStr() { return wallClock(new Date()).slice(0, 10); }
+
   function tzName() { return TZ === 'America/New_York' ? 'Eastern Time' : TZ.replace(/_/g, ' '); }
 
   function hashCode(str) {
@@ -67,7 +79,7 @@
 
   /* ---------- state (kept in the page address so links can be shared) ---------- */
 
-  var state = { teams: new Set(), type: 'games', view: 'listMonth' };
+  var state = { teams: new Set(), type: 'games', view: 'listMonth', rangeFrom: '', rangeTo: '' };
 
   function defaultTeamIds() {
     var d = (S.defaultTeams || '').trim();
@@ -86,7 +98,13 @@
     var type = p.get('type');
     state.type = (type === 'all' || type === 'games') ? type : (S.defaultEventType === 'all' ? 'all' : 'games');
     var v = p.get('view');
-    state.view = VIEW_FROM_SHORT[v] || VIEW_FROM_SHORT[S.defaultView] || 'listMonth';
+    var view = VIEW_FROM_SHORT[v] || VIEW_FROM_SHORT[S.defaultView] || 'listMonth';
+    if (view === 'timeGridWeek' && isNarrow()) view = 'listWeek';   // a 7-column grid is too cramped on phones
+    var from = p.get('from') || '';
+    var to = p.get('to') || '';
+    if (YMD.test(from) && YMD.test(to) && from <= to) { state.rangeFrom = from; state.rangeTo = to; }
+    if (view === 'listRange' && !state.rangeFrom) view = 'listMonth';
+    state.view = view;
   }
 
   function writeHash() {
@@ -95,6 +113,7 @@
     p.set('teams', ids.length ? ids.join(',') : 'none');
     p.set('type', state.type);
     p.set('view', VIEW_TO_SHORT[state.view] || 'list');
+    if (state.view === 'listRange' && state.rangeFrom) { p.set('from', state.rangeFrom); p.set('to', state.rangeTo); }
     try { history.replaceState(null, '', '#' + p.toString()); } catch (e) { /* embedded pages may not allow this */ }
   }
 
@@ -139,78 +158,185 @@
 
   /* ---------- team picker ---------- */
 
+  function setGroupOpen(btn, open) {
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    var body = document.getElementById(btn.getAttribute('aria-controls'));
+    if (body) body.hidden = !open;
+  }
+
+  function updateToggleAll() {
+    var anyOpen = !!document.querySelector('#teamList .twisty[aria-expanded="true"]');
+    $('toggleGroups').textContent = anyOpen ? 'Collapse all' : 'Expand all';
+  }
+
+  var ui = { groups: {} };   // group key -> { cb, count, members }
+
+  function groupKey(t) { return (t.division || '') + '||' + t.sport; }
+
+  // Select or clear a whole scope: every team, one division, or one sport within a division.
+  function applyScope(scope, key, on) {
+    teams.forEach(function (t) {
+      var hit = scope === 'all' ||
+        (scope === 'division' && (t.division || '') === key) ||
+        (scope === 'group' && groupKey(t) === key);
+      if (!hit) return;
+      if (on) state.teams.add(t.id); else state.teams.delete(t.id);
+    });
+    selectionChanged();
+  }
+
+  function miniLinks(scope, key, what) {
+    var wrap = el('span', 'quick');
+    [['Select all', '1'], ['Select none', '0']].forEach(function (p) {
+      var b = el('button', 'link', p[0]);
+      b.type = 'button';
+      b.dataset.scope = scope;
+      b.dataset.key = key;
+      b.dataset.on = p[1];
+      b.setAttribute('aria-label', p[0] + ' for ' + what);
+      wrap.appendChild(b);
+    });
+    return wrap;
+  }
+
+  function buildGroup(division, sport, members, index, startOpen) {
+    var key = division + '||' + sport;
+    var label = (division ? division + ' ' : '') + sport;
+    var bodyId = 'group-body-' + index;
+    var wrap = el('div', 'group');
+    wrap.setAttribute('role', 'group');
+    wrap.setAttribute('aria-label', label);
+
+    var head = el('div', 'group-head');
+    var lab = el('label', 'group-label');
+    var gcb = el('input');
+    gcb.type = 'checkbox';
+    gcb.dataset.group = key;
+    lab.appendChild(gcb);
+    lab.appendChild(el('span', null, sport));
+    head.appendChild(lab);
+
+    var toggle = el('button', 'twisty');
+    toggle.type = 'button';
+    toggle.setAttribute('aria-expanded', startOpen ? 'true' : 'false');
+    toggle.setAttribute('aria-controls', bodyId);
+    toggle.setAttribute('aria-label', 'Show or hide ' + label + ' teams');
+    var count = el('span', 'group-count');
+    var chev = el('span', 'chev');
+    chev.setAttribute('aria-hidden', 'true');
+    toggle.appendChild(count);
+    toggle.appendChild(chev);
+    head.appendChild(toggle);
+    wrap.appendChild(head);
+
+    var body = el('div', 'group-body');
+    body.id = bodyId;
+    body.hidden = !startOpen;
+    var tools = el('div', 'group-tools');
+    tools.appendChild(miniLinks('group', key, label + ' teams'));
+    body.appendChild(tools);
+    members.forEach(function (t) {
+      var tl = el('label', 'team');
+      var cb = el('input');
+      cb.type = 'checkbox';
+      cb.value = t.id;
+      cb.dataset.team = t.id;
+      var dot = el('span', 'swatch');
+      dot.style.backgroundColor = t.color;
+      dot.setAttribute('aria-hidden', 'true');
+      tl.appendChild(cb);
+      tl.appendChild(dot);
+      tl.appendChild(el('span', null, t.name));
+      body.appendChild(tl);
+    });
+    wrap.appendChild(body);
+
+    ui.groups[key] = { cb: gcb, count: count, members: members };
+    return wrap;
+  }
+
   function buildTeamList() {
     var list = $('teamList');
-    var groups = [];
-    var bySport = {};
+    var hasDivisions = teams.some(function (t) { return t.division; });
+
+    // The team order in config.js is already the display order (the Sheet export sorts it).
+    var order = [];
+    var byDivision = {};
     teams.forEach(function (t) {
-      if (!bySport[t.sport]) { bySport[t.sport] = []; groups.push(t.sport); }
-      bySport[t.sport].push(t);
+      var d = t.division || '';
+      if (!byDivision[d]) { byDivision[d] = { sports: [], bySport: {} }; order.push(d); }
+      var D = byDivision[d];
+      if (!D.bySport[t.sport]) { D.bySport[t.sport] = []; D.sports.push(t.sport); }
+      D.bySport[t.sport].push(t);
     });
 
-    groups.forEach(function (sport) {
-      var wrap = el('fieldset', 'group');
-      var head = el('label', 'group-head');
-      var gcb = el('input');
-      gcb.type = 'checkbox';
-      gcb.dataset.group = sport;
-      head.appendChild(gcb);
-      head.appendChild(el('span', null, sport));
-      var legend = el('legend', 'sr-only', sport);
-      wrap.appendChild(legend);
-      wrap.appendChild(head);
+    // With many teams, sports start collapsed so people can open just the one they want.
+    var startOpen = teams.length <= 10;
+    var index = 0;
 
-      bySport[sport].forEach(function (t) {
-        var lab = el('label', 'team');
-        var cb = el('input');
-        cb.type = 'checkbox';
-        cb.value = t.id;
-        cb.dataset.team = t.id;
-        var dot = el('span', 'swatch');
-        dot.style.backgroundColor = t.color;
-        dot.setAttribute('aria-hidden', 'true');
-        lab.appendChild(cb);
-        lab.appendChild(dot);
-        lab.appendChild(el('span', null, t.name));
-        wrap.appendChild(lab);
+    order.forEach(function (d) {
+      var D = byDivision[d];
+      var section = el('section', 'division');
+      if (hasDivisions && d) {
+        section.setAttribute('aria-label', d);
+        var dh = el('div', 'division-head');
+        dh.appendChild(el('h3', null, d));
+        dh.appendChild(miniLinks('division', d, d + ' teams'));
+        section.appendChild(dh);
+      }
+      D.sports.forEach(function (sport) {
+        section.appendChild(buildGroup(d, sport, D.bySport[sport], index++, startOpen));
       });
-      list.appendChild(wrap);
+      list.appendChild(section);
     });
+
+    list.addEventListener('click', function (e) {
+      var target = e.target instanceof Element ? e.target : null;
+      if (!target) return;
+      var tw = target.closest('.twisty');
+      if (tw) {
+        setGroupOpen(tw, tw.getAttribute('aria-expanded') !== 'true');
+        updateToggleAll();
+        return;
+      }
+      var sc = target.closest('button[data-scope]');
+      if (sc) applyScope(sc.dataset.scope, sc.dataset.key, sc.dataset.on === '1');
+    });
+
+    $('toggleGroups').addEventListener('click', function () {
+      var anyOpen = !!document.querySelector('#teamList .twisty[aria-expanded="true"]');
+      document.querySelectorAll('#teamList .twisty').forEach(function (b) { setGroupOpen(b, !anyOpen); });
+      updateToggleAll();
+    });
+    updateToggleAll();
 
     list.addEventListener('change', function (e) {
       var t = e.target;
       if (!(t instanceof HTMLInputElement)) return;
-      if (t.dataset.group) {
-        teams.forEach(function (team) {
-          if (team.sport === t.dataset.group) {
-            if (t.checked) state.teams.add(team.id); else state.teams.delete(team.id);
-          }
-        });
-      } else if (t.dataset.team) {
-        if (t.checked) state.teams.add(t.dataset.team); else state.teams.delete(t.dataset.team);
+      if (t.dataset.group !== undefined) {
+        applyScope('group', t.dataset.group, t.checked);
+        return;
       }
-      selectionChanged();
+      if (t.dataset.team) {
+        if (t.checked) state.teams.add(t.dataset.team); else state.teams.delete(t.dataset.team);
+        selectionChanged();
+      }
     });
 
-    $('selectAll').addEventListener('click', function () {
-      teams.forEach(function (t) { state.teams.add(t.id); });
-      selectionChanged();
-    });
-    $('clearAll').addEventListener('click', function () {
-      state.teams.clear();
-      selectionChanged();
-    });
+    $('selectAll').addEventListener('click', function () { applyScope('all', '', true); });
+    $('clearAll').addEventListener('click', function () { applyScope('all', '', false); });
   }
 
   function syncControls() {
     document.querySelectorAll('#teamList input[data-team]').forEach(function (cb) {
       cb.checked = state.teams.has(cb.dataset.team);
     });
-    document.querySelectorAll('#teamList input[data-group]').forEach(function (gcb) {
-      var inGroup = teams.filter(function (t) { return t.sport === gcb.dataset.group; });
-      var n = inGroup.filter(function (t) { return state.teams.has(t.id); }).length;
-      gcb.checked = n === inGroup.length;
-      gcb.indeterminate = n > 0 && n < inGroup.length;
+    Object.keys(ui.groups).forEach(function (k) {
+      var g = ui.groups[k];
+      var n = g.members.filter(function (t) { return state.teams.has(t.id); }).length;
+      g.cb.checked = n === g.members.length;
+      g.cb.indeterminate = n > 0 && n < g.members.length;
+      g.count.textContent = n + ' of ' + g.members.length;
     });
     document.querySelectorAll('input[name="type"], input[name="subType"]').forEach(function (r) {
       r.checked = r.value === state.type;
@@ -233,6 +359,7 @@
     syncControls();
     writeHash();
     if ($('subscribeDialog').open) renderSubscribe();
+    updateWeekNote();
     clearTimeout(refetchTimer);
     refetchTimer = setTimeout(function () { if (calendar) calendar.refetchEvents(); }, 150);
   }
@@ -363,7 +490,7 @@
 
   /* ---------- status messages ---------- */
 
-  var statusLoading, statusError;
+  var statusLoading, statusError, statusNote;
 
   function buildStatus() {
     var box = $('status');
@@ -375,6 +502,10 @@
     statusError.hidden = true;
     statusLoading = el('p', 'loading', 'Loading schedule\u2026');
     statusLoading.hidden = true;
+    statusNote = el('p', 'notice');
+    statusNote.textContent = 'Week view gets crowded with many teams selected. Try List view, or select fewer teams.';
+    statusNote.hidden = true;
+    box.appendChild(statusNote);
     box.appendChild(statusError);
     box.appendChild(statusLoading);
   }
@@ -550,6 +681,7 @@
     h.textContent = '';
     h.appendChild(el('h2', null, S.pageTitle));
     h.appendChild(el('p', 'p-teams', sel.length ? sel.map(function (t) { return t.name; }).join(', ') : 'No teams selected'));
+    if (calendar && calendar.view && calendar.view.title) h.appendChild(el('p', 'p-range', calendar.view.title));
     var printed = new Date().toLocaleDateString('en-US', { timeZone: TZ, month: 'long', day: 'numeric', year: 'numeric' });
     h.appendChild(el('p', null, 'Showing ' + typeLabel() + '. Printed ' + printed + '. ' +
       (S.footerNote || '') + ' All times are ' + tzName() + '.'));
@@ -559,18 +691,75 @@
 
   var calendar = null;
 
+  function updateViewbar() {
+    var cur = VIEW_TO_SHORT[calendar.view.type];
+    document.querySelectorAll('#viewbar button').forEach(function (b) {
+      b.setAttribute('aria-pressed', b.dataset.view === cur ? 'true' : 'false');
+    });
+    $('rangeBox').hidden = cur !== 'range';
+  }
+
+  var rangeNow = null;   // the custom date range currently asked for ({ from, to })
+
+  function updateWeekNote() {
+    if (!statusNote) return;
+    statusNote.hidden = !(calendar && calendar.view && calendar.view.type === 'timeGridWeek' && state.teams.size > 4);
+  }
+
+  function showRange(from, to) {
+    rangeNow = { from: from, to: to };
+    calendar.changeView('listRange', { start: from, end: addDays(to, 1) });   // end is exclusive
+  }
+
+  function chooseView(short) {
+    if (short === 'range') {
+      var from = state.rangeFrom || todayStr();
+      var to = state.rangeTo || addDays(todayStr(), 27);
+      $('rangeFrom').value = from;
+      $('rangeTo').value = to;
+      showRange(from, to);
+      return;
+    }
+    var view = short === 'week' ? (isNarrow() ? 'listWeek' : 'timeGridWeek') : VIEW_FROM_SHORT[short];
+    if (view) calendar.changeView(view);
+  }
+
+  function applyRangeInputs() {
+    var from = $('rangeFrom').value;
+    var to = $('rangeTo').value;
+    var msg = $('rangeMsg');
+    if (!from || !to) { msg.textContent = 'Choose both dates.'; return; }
+    if (to < from) { msg.textContent = 'The end date is before the start date.'; return; }
+    msg.textContent = '';
+    showRange(from, to);
+  }
+
   function buildCalendar() {
+    // A shared link may ask for a custom date range: start on it directly.
+    if (state.view === 'listRange') rangeNow = { from: state.rangeFrom, to: state.rangeTo };
     calendar = new FullCalendar.Calendar($('calendar'), {
       initialView: state.view,
       timeZone: 'UTC',
       now: function () { return wallClock(new Date()); },
       height: 'auto',
-      headerToolbar: { left: 'prev,next today', center: 'title', right: 'listMonth,dayGridMonth,listFull' },
+      headerToolbar: { left: 'prev,next today', center: 'title', right: '' },
       buttonText: { today: 'Today' },
       views: {
-        listMonth: { buttonText: 'List' },
-        dayGridMonth: { buttonText: 'Month' },
-        listFull: { type: 'list', duration: { days: 365 }, buttonText: 'Full schedule' }
+        listMonth: {},
+        listWeek: {},
+        timeGridWeek: {
+          slotMinTime: '06:00:00', slotMaxTime: '23:00:00', slotDuration: '00:30:00',
+          scrollTime: '08:00:00', nowIndicator: true, allDaySlot: true, allDayText: 'All day',
+          slotEventOverlap: false, displayEventEnd: false
+        },
+        dayGridMonth: {},
+        listFull: { type: 'list', duration: { days: 365 } },
+        listRange: {
+          type: 'list',
+          visibleRange: function () {
+            return rangeNow ? { start: rangeNow.from, end: addDays(rangeNow.to, 1) } : { start: todayStr(), end: addDays(todayStr(), 28) };
+          }
+        }
       },
       validRange: function (nowDate) {
         return {
@@ -583,11 +772,21 @@
       eventTimeFormat: { hour: 'numeric', minute: '2-digit', meridiem: 'short' },
       events: loadEvents,
       eventContent: function (arg) {
-        if (arg.view.type.indexOf('list') !== 0) return true;
-        var wrap = el('span', 'ev');
-        wrap.appendChild(el('span', 'ev-title', arg.event.title));
-        wrap.appendChild(el('span', 'ev-team', arg.event.extendedProps.teamName));
-        return { domNodes: [wrap] };
+        var type = arg.view.type;
+        if (type.indexOf('list') === 0) {
+          var wrap = el('span', 'ev');
+          wrap.appendChild(el('span', 'ev-title', arg.event.title));
+          wrap.appendChild(el('span', 'ev-team', arg.event.extendedProps.teamName));
+          return { domNodes: [wrap] };
+        }
+        if (type.indexOf('timeGrid') === 0) {
+          var g = el('span', 'evg');
+          if (arg.timeText) g.appendChild(el('span', 'evg-time', arg.timeText));
+          g.appendChild(el('span', 'evg-title', arg.event.title));
+          g.appendChild(el('span', 'evg-team', arg.event.extendedProps.teamName));
+          return { domNodes: [g] };
+        }
+        return true;
       },
       eventClick: function (info) {
         info.jsEvent.preventDefault();
@@ -605,9 +804,25 @@
         statusLoading.hidden = !isLoading;
         $('calendar').setAttribute('aria-busy', isLoading ? 'true' : 'false');
       },
+      windowResize: function () {
+        var v = calendar.view.type;
+        if (v === 'timeGridWeek' && isNarrow()) calendar.changeView('listWeek');
+        else if (v === 'listWeek' && !isNarrow()) calendar.changeView('timeGridWeek');
+      },
       datesSet: function () {
-        state.view = calendar.view.type;
+        var v = calendar.view;
+        state.view = v.type;
+        if (v.type === 'listRange') {
+          state.rangeFrom = ymd(v.currentStart);
+          state.rangeTo = ymd(new Date(v.currentEnd.getTime() - DAY));
+          $('rangeFrom').value = state.rangeFrom;
+          $('rangeTo').value = state.rangeTo;
+        }
+        $('calendar').classList.toggle('is-range', v.type === 'listRange');
+        updateViewbar();
+        updateWeekNote();
         writeHash();
+        updatePrintHeader();
       }
     });
     calendar.render();
@@ -633,6 +848,13 @@
     document.querySelectorAll('input[name="type"], input[name="subType"]').forEach(function (r) {
       r.addEventListener('change', function () { setType(r.value); });
     });
+    document.querySelectorAll('#viewbar button').forEach(function (b) {
+      b.addEventListener('click', function () { chooseView(b.dataset.view); });
+    });
+    $('rangeFrom').addEventListener('change', applyRangeInputs);
+    $('rangeTo').addEventListener('change', applyRangeInputs);
+    $('rangeFrom').min = $('rangeTo').min = addDays(todayStr(), -(S.daysBack || 60));
+    $('rangeFrom').max = $('rangeTo').max = addDays(todayStr(), (S.daysAhead || 365));
   }
 
   function init() {
