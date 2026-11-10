@@ -12,7 +12,7 @@
  * Calendar IDs are not secret: they belong to public calendars.
  */
 window.SA_CONFIG = {
-  apiKey: "",
+  apiKey: "AIzaSyBtn8R_trxNdWelHFlUef5EnbK4HRjlsCs",
 
   settings: {
     pageTitle: "Saint Ann's Athletics Calendar",

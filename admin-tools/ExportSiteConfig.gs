@@ -14,8 +14,10 @@
  *          siteCfgAddMenu();
  *      inside it. If it does not, add this to the file:
  *          function onOpen() { siteCfgAddMenu(); }
- *   3. Paste the restricted Google Calendar API key between the quotes below (it is not secret:
- *      it is visible on the public page, and is limited by website and by API).
+ *   3. Put the restricted Google Calendar API key in a row on the Settings tab named "API Key"
+ *      (it is not secret: it is visible on the public page, and is limited by website and by API).
+ *      Keeping it in the Sheet means it survives when this script file is replaced. The constant
+ *      below is only a fallback for when that row is missing or blank.
  *   4. Save, reload the Sheet, and use Site tools > Export site config.
  */
 
@@ -167,6 +169,13 @@ function siteCfgBuild_(teamValues, settingValues, apiKey, today) {
     catch (e) { errors.push('Settings: "Time Zone" is not a recognized zone (got "' + settings.timeZone + '").'); }
   }
 
+  /* ----- API key: the Settings tab wins, the script constant is the fallback ----- */
+  var sheetKey = text('API Key', '');
+  if (sheetKey) apiKey = sheetKey;
+  if (apiKey && !/^AIza[0-9A-Za-z_-]{35}$/.test(apiKey)) {
+    warnings.push('Settings: "API Key" does not look like a Google API key (they start with AIza and are 39 characters). Check for extra spaces or a partial paste.');
+  }
+
   /* ----- teams ----- */
   var errorsBeforeCols = errors.length;
   var header = (teamValues[0] || []).map(function (h) { return String(h).trim().toLowerCase(); });
@@ -241,7 +250,7 @@ function siteCfgBuild_(teamValues, settingValues, apiKey, today) {
       else if (!match.active) warnings.push('Settings: "Default Teams" lists "' + tid + '", which is not Active, so it will not be selected.');
     });
   }
-  if (!apiKey) warnings.push('No API key is set in the script (SITECFG_API_KEY), so the page will show sample events instead of real ones.');
+  if (!apiKey) warnings.push('No API key found: add a row named "API Key" to the Settings tab. Without it the page shows sample events instead of real ones.');
 
   if (errors.length) return { config: '', links: '', errors: errors, warnings: warnings };
   return {
