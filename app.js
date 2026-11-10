@@ -7,8 +7,10 @@
  *   3. Hands those events to FullCalendar to draw.
  *   4. Builds subscribe links and a print header.
  *
- * What it does not do: no logins, no cookies or browser storage, no data collected or sent anywhere
- * except read requests to googleapis.com. All text from calendars is inserted as plain text.
+ * What it does not do: no logins, no cookies, no tracking, no data collected or sent anywhere except
+ * read requests to googleapis.com. All text from calendars is inserted as plain text.
+ * The one thing it keeps is the visitor's own team choice, saved in their browser (localStorage) so the
+ * page opens on the same teams next time. It never leaves their device.
  */
 (function () {
   'use strict';
@@ -79,24 +81,52 @@
 
   /* ---------- state (kept in the page address so links can be shared) ---------- */
 
-  var state = { teams: new Set(), type: 'games', view: 'listMonth', rangeFrom: '', rangeTo: '' };
+  // mode "all": every active team. mode "pick": only the teams in state.picked.
+  var state = { mode: 'all', picked: new Set(), type: 'games', view: 'listMonth', rangeFrom: '', rangeTo: '' };
+  var STORE_KEY = 'saAthleticsCalendar.v1';
 
-  function defaultTeamIds() {
+  function defaultSelection() {
     var d = (S.defaultTeams || '').trim();
-    if (d.toUpperCase() === 'ALL') return teams.map(function (t) { return t.id; });
-    if (!d) return [];
-    return d.split(',').map(function (x) { return x.trim(); }).filter(function (x) { return teamById[x]; });
+    if (!d || d.toUpperCase() === 'ALL') return { mode: 'all', ids: [] };
+    return { mode: 'pick', ids: d.split(',').map(function (x) { return x.trim(); }).filter(function (x) { return teamById[x]; }) };
+  }
+
+  // The visitor's own last choice, kept only in their browser.
+  function loadSaved() {
+    try {
+      var s = JSON.parse(window.localStorage.getItem(STORE_KEY) || 'null');
+      if (!s || (s.mode !== 'all' && s.mode !== 'pick')) return null;
+      return {
+        mode: s.mode,
+        ids: (Array.isArray(s.teams) ? s.teams : []).filter(function (x) { return teamById[x]; }),
+        type: s.type === 'all' || s.type === 'games' ? s.type : null
+      };
+    } catch (e) { return null; }
+  }
+
+  function save() {
+    try {
+      window.localStorage.setItem(STORE_KEY, JSON.stringify({
+        mode: state.mode, teams: Array.from(state.picked), type: state.type
+      }));
+    } catch (e) { /* storage blocked or full: the page still works, it just won't remember */ }
   }
 
   function readHash() {
     var p = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    var saved = loadSaved();
     var tp = p.get('teams');
-    var ids = tp === null ? defaultTeamIds()
-      : tp === 'none' ? []
-      : tp.split(',').filter(function (x) { return teamById[x]; });
-    state.teams = new Set(ids);
-    var type = p.get('type');
+    var sel;
+    if (tp === 'all') sel = { mode: 'all', ids: saved ? saved.ids : [] };
+    else if (tp === 'none') sel = { mode: 'pick', ids: [] };
+    else if (tp) sel = { mode: 'pick', ids: tp.split(',').filter(function (x) { return teamById[x]; }) };
+    else sel = saved || defaultSelection();
+    state.mode = sel.mode;
+    state.picked = new Set(sel.ids);
+
+    var type = p.get('type') || (tp === null && saved && saved.type);
     state.type = (type === 'all' || type === 'games') ? type : (S.defaultEventType === 'all' ? 'all' : 'games');
+
     var v = p.get('view');
     var view = VIEW_FROM_SHORT[v] || VIEW_FROM_SHORT[S.defaultView] || 'listMonth';
     if (view === 'timeGridWeek' && isNarrow()) view = 'listWeek';   // a 7-column grid is too cramped on phones
@@ -108,9 +138,12 @@
   }
 
   function writeHash() {
-    var ids = teams.filter(function (t) { return state.teams.has(t.id); }).map(function (t) { return t.id; });
     var p = new URLSearchParams();
-    p.set('teams', ids.length ? ids.join(',') : 'none');
+    if (state.mode === 'all') p.set('teams', 'all');
+    else {
+      var ids = teams.filter(function (t) { return state.picked.has(t.id); }).map(function (t) { return t.id; });
+      p.set('teams', ids.length ? ids.join(',') : 'none');
+    }
     p.set('type', state.type);
     p.set('view', VIEW_TO_SHORT[state.view] || 'list');
     if (state.view === 'listRange' && state.rangeFrom) { p.set('from', state.rangeFrom); p.set('to', state.rangeTo); }
@@ -118,7 +151,8 @@
   }
 
   function selectedTeams() {
-    return teams.filter(function (t) { return state.teams.has(t.id); });
+    if (state.mode === 'all') return teams.slice();
+    return teams.filter(function (t) { return state.picked.has(t.id); });
   }
 
   function calendarFor(team, type) {
@@ -127,6 +161,16 @@
 
   function typeLabel(type) {
     return (type || state.type) === 'all' ? 'games, practices and meetings' : 'games and matches';
+  }
+
+  // Short description of the current team choice: "All teams", "Boys JV Basketball", "A, B and 3 more".
+  function teamsLabel(long) {
+    if (state.mode === 'all') return 'All teams';
+    var sel = selectedTeams();
+    if (!sel.length) return 'No teams selected';
+    var names = sel.map(function (t) { return t.name; });
+    if (long || names.length <= 2) return names.join(', ');
+    return names.slice(0, 2).join(', ') + ' and ' + (names.length - 2) + ' more';
   }
 
   /* ---------- page text ---------- */
@@ -158,6 +202,12 @@
 
   /* ---------- team picker ---------- */
 
+  // Teams with nothing on their calendar from today on. They are listed separately, not hidden,
+  // so families can still find an off-season team.
+  var parked = new Set();
+
+  var ui = { groups: {}, divisions: {} };   // key -> { cb, count, members } / division -> members
+
   function setGroupOpen(btn, open) {
     btn.setAttribute('aria-expanded', open ? 'true' : 'false');
     var body = document.getElementById(btn.getAttribute('aria-controls'));
@@ -169,19 +219,12 @@
     $('toggleGroups').textContent = anyOpen ? 'Collapse all' : 'Expand all';
   }
 
-  var ui = { groups: {} };   // group key -> { cb, count, members }
-
-  function groupKey(t) { return (t.division || '') + '||' + t.sport; }
-
-  // Select or clear a whole scope: every team, one division, or one sport within a division.
+  // Select or clear a whole scope: every team, one division, or one group.
   function applyScope(scope, key, on) {
-    teams.forEach(function (t) {
-      var hit = scope === 'all' ||
-        (scope === 'division' && (t.division || '') === key) ||
-        (scope === 'group' && groupKey(t) === key);
-      if (!hit) return;
-      if (on) state.teams.add(t.id); else state.teams.delete(t.id);
-    });
+    var members = scope === 'all' ? teams
+      : scope === 'division' ? (ui.divisions[key] || [])
+      : (ui.groups[key] ? ui.groups[key].members : []);
+    members.forEach(function (t) { if (on) state.picked.add(t.id); else state.picked.delete(t.id); });
     selectionChanged();
   }
 
@@ -199,9 +242,23 @@
     return wrap;
   }
 
-  function buildGroup(division, sport, members, index, startOpen) {
-    var key = division + '||' + sport;
-    var label = (division ? division + ' ' : '') + sport;
+  function teamRow(t) {
+    var tl = el('label', 'team');
+    tl.dataset.name = t.name.toLowerCase();
+    var cb = el('input');
+    cb.type = 'checkbox';
+    cb.value = t.id;
+    cb.dataset.team = t.id;
+    var dot = el('span', 'swatch');
+    dot.style.backgroundColor = t.color;
+    dot.setAttribute('aria-hidden', 'true');
+    tl.appendChild(cb);
+    tl.appendChild(dot);
+    tl.appendChild(el('span', null, t.name));
+    return tl;
+  }
+
+  function buildGroup(key, title, label, members, index, startOpen) {
     var bodyId = 'group-body-' + index;
     var wrap = el('div', 'group');
     wrap.setAttribute('role', 'group');
@@ -212,8 +269,9 @@
     var gcb = el('input');
     gcb.type = 'checkbox';
     gcb.dataset.group = key;
+    gcb.setAttribute('aria-label', 'All ' + label + ' teams');
     lab.appendChild(gcb);
-    lab.appendChild(el('span', null, sport));
+    lab.appendChild(el('span', null, title));
     head.appendChild(lab);
 
     var toggle = el('button', 'twisty');
@@ -232,23 +290,7 @@
     var body = el('div', 'group-body');
     body.id = bodyId;
     body.hidden = !startOpen;
-    var tools = el('div', 'group-tools');
-    tools.appendChild(miniLinks('group', key, label + ' teams'));
-    body.appendChild(tools);
-    members.forEach(function (t) {
-      var tl = el('label', 'team');
-      var cb = el('input');
-      cb.type = 'checkbox';
-      cb.value = t.id;
-      cb.dataset.team = t.id;
-      var dot = el('span', 'swatch');
-      dot.style.backgroundColor = t.color;
-      dot.setAttribute('aria-hidden', 'true');
-      tl.appendChild(cb);
-      tl.appendChild(dot);
-      tl.appendChild(el('span', null, t.name));
-      body.appendChild(tl);
-    });
+    members.forEach(function (t) { body.appendChild(teamRow(t)); });
     wrap.appendChild(body);
 
     ui.groups[key] = { cb: gcb, count: count, members: members };
@@ -257,25 +299,34 @@
 
   function buildTeamList() {
     var list = $('teamList');
+    list.textContent = '';
+    ui.groups = {};
+    ui.divisions = {};
     var hasDivisions = teams.some(function (t) { return t.division; });
 
     // The team order in config.js is already the display order (the Sheet export sorts it).
     var order = [];
     var byDivision = {};
     teams.forEach(function (t) {
+      if (parked.has(t.id)) return;
       var d = t.division || '';
-      if (!byDivision[d]) { byDivision[d] = { sports: [], bySport: {} }; order.push(d); }
+      if (!byDivision[d]) { byDivision[d] = { sports: [], bySport: {}, members: [] }; order.push(d); }
       var D = byDivision[d];
       if (!D.bySport[t.sport]) { D.bySport[t.sport] = []; D.sports.push(t.sport); }
       D.bySport[t.sport].push(t);
+      D.members.push(t);
     });
 
-    // With many teams, sports start collapsed so people can open just the one they want.
-    var startOpen = teams.length <= 10;
+    // With only a few sports, every group starts open. With many, they start collapsed so people can
+    // open just the one they want (or type in the search box).
+    var groupCount = 0;
+    order.forEach(function (d) { groupCount += byDivision[d].sports.length; });
+    var startOpen = groupCount <= 6;
     var index = 0;
 
     order.forEach(function (d) {
       var D = byDivision[d];
+      ui.divisions[d] = D.members;
       var section = el('section', 'division');
       if (hasDivisions && d) {
         section.setAttribute('aria-label', d);
@@ -285,11 +336,31 @@
         section.appendChild(dh);
       }
       D.sports.forEach(function (sport) {
-        section.appendChild(buildGroup(d, sport, D.bySport[sport], index++, startOpen));
+        var label = (d ? d + ' ' : '') + sport;
+        section.appendChild(buildGroup(d + '||' + sport, sport, label, D.bySport[sport], index++, startOpen));
       });
       list.appendChild(section);
     });
 
+    var parkedTeams = teams.filter(function (t) { return parked.has(t.id); });
+    if (parkedTeams.length) {
+      var ps = el('section', 'division parked');
+      ps.setAttribute('aria-label', 'No upcoming events');
+      var ph = el('div', 'division-head');
+      ph.appendChild(el('h3', null, 'No upcoming events'));
+      ps.appendChild(ph);
+      ps.appendChild(el('p', 'parked-note', 'Out of season, or not scheduled yet. You can still choose these teams.'));
+      ps.appendChild(buildGroup('__parked', 'Other teams', 'teams with no upcoming events', parkedTeams, index++, false));
+      list.appendChild(ps);
+    }
+
+    updateToggleAll();
+    syncControls();
+    filterTeams();
+  }
+
+  function wirePicker() {
+    var list = $('teamList');
     list.addEventListener('click', function (e) {
       var target = e.target instanceof Element ? e.target : null;
       if (!target) return;
@@ -303,13 +374,6 @@
       if (sc) applyScope(sc.dataset.scope, sc.dataset.key, sc.dataset.on === '1');
     });
 
-    $('toggleGroups').addEventListener('click', function () {
-      var anyOpen = !!document.querySelector('#teamList .twisty[aria-expanded="true"]');
-      document.querySelectorAll('#teamList .twisty').forEach(function (b) { setGroupOpen(b, !anyOpen); });
-      updateToggleAll();
-    });
-    updateToggleAll();
-
     list.addEventListener('change', function (e) {
       var t = e.target;
       if (!(t instanceof HTMLInputElement)) return;
@@ -318,47 +382,100 @@
         return;
       }
       if (t.dataset.team) {
-        if (t.checked) state.teams.add(t.dataset.team); else state.teams.delete(t.dataset.team);
+        if (t.checked) state.picked.add(t.dataset.team); else state.picked.delete(t.dataset.team);
         selectionChanged();
       }
     });
 
+    $('toggleGroups').addEventListener('click', function () {
+      var anyOpen = !!document.querySelector('#teamList .twisty[aria-expanded="true"]');
+      document.querySelectorAll('#teamList .twisty').forEach(function (b) { setGroupOpen(b, !anyOpen); });
+      updateToggleAll();
+    });
     $('selectAll').addEventListener('click', function () { applyScope('all', '', true); });
     $('clearAll').addEventListener('click', function () { applyScope('all', '', false); });
+    $('teamSearch').addEventListener('input', filterTeams);
+    $('teamSearch').addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && $('teamSearch').value) { e.preventDefault(); $('teamSearch').value = ''; filterTeams(); }
+    });
+
+    document.querySelectorAll('input[name="mode"]').forEach(function (r) {
+      r.addEventListener('change', function () { setMode(r.value); });
+    });
+  }
+
+  // Type-to-filter. Every word typed must appear in the team name ("girls 7th" finds Girls 7th Grade ...).
+  // While searching, matching groups are shown open; clearing the box restores what was open before.
+  function filterTeams() {
+    var q = $('teamSearch').value.trim().toLowerCase();
+    var words = q ? q.split(/\s+/) : [];
+    var anyMatch = false;
+    document.querySelectorAll('#teamList .division').forEach(function (section) {
+      var sectionMatch = false;
+      section.querySelectorAll('.group').forEach(function (g) {
+        var groupMatch = false;
+        g.querySelectorAll('.team').forEach(function (row) {
+          var hit = words.every(function (w) { return row.dataset.name.indexOf(w) >= 0; });
+          row.hidden = !hit;
+          if (hit) groupMatch = true;
+        });
+        g.hidden = !groupMatch;
+        var tw = g.querySelector('.twisty');
+        var body = g.querySelector('.group-body');
+        if (body && tw) body.hidden = words.length ? !groupMatch : tw.getAttribute('aria-expanded') !== 'true';
+        if (groupMatch) sectionMatch = true;
+      });
+      section.hidden = !sectionMatch;
+      if (sectionMatch) anyMatch = true;
+    });
+    $('teamList').classList.toggle('searching', words.length > 0);
+    var empty = $('searchEmpty');
+    empty.hidden = anyMatch || !words.length;
+    if (!empty.hidden) empty.textContent = 'No teams match \u201c' + $('teamSearch').value.trim() + '\u201d.';
+  }
+
+  function setMode(mode) {
+    if (mode !== 'all' && mode !== 'pick') return;
+    state.mode = mode;
+    if (mode === 'pick' && !state.picked.size) {
+      $('picker').open = true;
+      setTimeout(function () { $('teamSearch').focus(); }, 0);
+    }
+    selectionChanged();
   }
 
   function syncControls() {
     document.querySelectorAll('#teamList input[data-team]').forEach(function (cb) {
-      cb.checked = state.teams.has(cb.dataset.team);
+      cb.checked = state.picked.has(cb.dataset.team);
     });
     Object.keys(ui.groups).forEach(function (k) {
       var g = ui.groups[k];
-      var n = g.members.filter(function (t) { return state.teams.has(t.id); }).length;
+      var n = g.members.filter(function (t) { return state.picked.has(t.id); }).length;
       g.cb.checked = n === g.members.length;
       g.cb.indeterminate = n > 0 && n < g.members.length;
       g.count.textContent = n + ' of ' + g.members.length;
     });
+    document.querySelectorAll('input[name="mode"]').forEach(function (r) { r.checked = r.value === state.mode; });
     document.querySelectorAll('input[name="type"], input[name="subType"]').forEach(function (r) {
       r.checked = r.value === state.type;
     });
+    $('picker').hidden = state.mode !== 'pick';
     updateSummary();
     updatePrintHeader();
   }
 
   function updateSummary() {
-    var sel = selectedTeams();
-    var s;
-    if (!sel.length) s = 'No teams selected.';
-    else if (sel.length === 1) s = 'Showing ' + typeLabel() + ' for ' + sel[0].name + '.';
-    else s = 'Showing ' + typeLabel() + ' for ' + sel.length + ' teams.';
-    $('summary').textContent = s;
+    var n = state.picked.size;
+    $('pickSummary').textContent = n ? teamsLabel() : 'None selected yet';
   }
 
   var refetchTimer = null;
   function selectionChanged() {
     syncControls();
     writeHash();
+    save();
     if ($('subscribeDialog').open) renderSubscribe();
+    if ($('shareDialog').open) $('shareUrl').value = window.location.href;
     updateWeekNote();
     clearTimeout(refetchTimer);
     refetchTimer = setTimeout(function () { if (calendar) calendar.refetchEvents(); }, 150);
@@ -368,6 +485,33 @@
     if (type !== 'games' && type !== 'all') return;
     state.type = type;
     selectionChanged();
+  }
+
+  // One small request per team: is there anything on its calendar from now on?
+  // Uses the all-events calendar, so a team with practices but no games yet still counts as active.
+  function checkUpcoming() {
+    if (DEMO) return;
+    var now = new Date().toISOString();
+    var jobs = teams.map(function (t) {
+      var u = new URL('https://www.googleapis.com/calendar/v3/calendars/' + encodeURIComponent(t.allCalId || t.gamesCalId) + '/events');
+      u.searchParams.set('key', API_KEY);
+      u.searchParams.set('timeMin', now);
+      u.searchParams.set('singleEvents', 'true');
+      u.searchParams.set('maxResults', '1');
+      u.searchParams.set('fields', 'items(id)');
+      return fetch(u.toString()).then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      }).then(function (d) { return (d.items || []).length > 0; });
+    });
+    Promise.allSettled(jobs).then(function (results) {
+      var changed = false;
+      results.forEach(function (r, i) {
+        // Only park a team when we know for sure it is empty; a failed check leaves it in the main list.
+        if (r.status === 'fulfilled' && !r.value) { parked.add(teams[i].id); changed = true; }
+      });
+      if (changed) buildTeamList();
+    });
   }
 
   /* ---------- loading events ---------- */
@@ -463,7 +607,7 @@
   function loadEvents(info, success) {
     var sel = selectedTeams();
     var type = state.type;
-    if (!sel.length) { showErrors([]); success([]); return; }
+    if (!sel.length) { showErrors([], 0); success([]); return; }
     var timeMin = new Date(info.start.getTime() - DAY).toISOString();
     var timeMax = new Date(info.end.getTime() + DAY).toISOString();
 
@@ -483,7 +627,7 @@
         if (r.status === 'fulfilled') events = events.concat(r.value);
         else failed.push(sel[i].name);
       });
-      showErrors(failed);
+      showErrors(failed, sel.length);
       success(events);
     });
   }
@@ -510,17 +654,25 @@
     box.appendChild(statusLoading);
   }
 
-  function showErrors(failed) {
+  function showErrors(failed, total) {
     statusError.textContent = '';
     if (!failed.length) { statusError.hidden = true; return; }
     statusError.hidden = false;
-    statusError.appendChild(el('span', null,
-      'We couldn\u2019t load the schedule for ' + failed.join(', ') +
-      '. Try again, or use the subscribe links, which don\u2019t depend on this page. '));
-    var retry = el('button', 'link', 'Try again');
+    var what = (failed.length === total && total > 3) ? 'the schedules'
+      : 'the schedule for ' + failed.join(', ');
+    statusError.appendChild(el('p', 'problem-text',
+      'We couldn\u2019t load ' + what + ' just now. The subscribe links still work: they don\u2019t depend on this page.'));
+    var row = el('div', 'problem-actions');
+    var links = el('a', 'btn primary', 'Open the subscribe links');
+    links.href = 'links.html';
+    links.target = '_blank';
+    links.rel = 'noopener';
+    row.appendChild(links);
+    var retry = el('button', null, 'Try again');
     retry.type = 'button';
     retry.addEventListener('click', function () { cache.clear(); calendar.refetchEvents(); });
-    statusError.appendChild(retry);
+    row.appendChild(retry);
+    statusError.appendChild(row);
   }
 
   /* ---------- event details ---------- */
@@ -613,6 +765,20 @@
   function webcalUrl(id) { return icsUrl(id).replace(/^https:/, 'webcal:'); }
   function gcalUrl(id) { return 'https://calendar.google.com/calendar/r?cid=' + encodeURIComponent(id); }
 
+  // A feed in the settings may be a Google Calendar ID or a full calendar address (https:// or webcal://).
+  function feedLinks(feed) {
+    var f = String(feed || '').trim();
+    if (!f) return null;
+    if (!/^(https?|webcal):\/\//i.test(f)) return { gcal: gcalUrl(f), webcal: webcalUrl(f), ics: icsUrl(f) };
+    var https = f.replace(/^(webcal|http):/i, 'https:');
+    var webcal = https.replace(/^https:/i, 'webcal:');
+    return { gcal: 'https://calendar.google.com/calendar/r?cid=' + encodeURIComponent(webcal), webcal: webcal, ics: https };
+  }
+
+  function allTeamsFeed(type) {
+    return feedLinks((type || state.type) === 'all' ? S.allTeamsAllFeed : S.allTeamsGamesFeed);
+  }
+
   function copyText(text, btn) {
     function done() {
       var old = btn.textContent;
@@ -644,43 +810,70 @@
     return a;
   }
 
+  function subRow(title, color, links) {
+    var row = el('div', 'sub-row');
+    var name = el('h3', null, title);
+    if (color) {
+      var sw = el('span', 'swatch');
+      sw.style.backgroundColor = color;
+      sw.setAttribute('aria-hidden', 'true');
+      name.prepend(sw);
+    }
+    row.appendChild(name);
+    var btns = el('div', 'sub-buttons');
+    btns.appendChild(linkButton('Add to Google Calendar', links.gcal, true));
+    btns.appendChild(linkButton('Apple Calendar or Outlook', links.webcal, false));
+    var copy = el('button', 'btn', 'Copy link');
+    copy.type = 'button';
+    copy.addEventListener('click', function () { copyText(links.ics, copy); });
+    btns.appendChild(copy);
+    row.appendChild(btns);
+    return row;
+  }
+
   function renderSubscribe() {
     var list = $('subList');
     list.textContent = '';
     var sel = selectedTeams();
     if (!sel.length) {
-      list.appendChild(el('p', 'hint', 'Choose at least one team in the filters, then come back to subscribe.'));
+      list.appendChild(el('p', 'hint', 'Choose at least one team, then come back to subscribe.'));
+      return;
+    }
+    // "All teams" with a combined feed set up: one subscription instead of one per team.
+    var combined = state.mode === 'all' ? allTeamsFeed() : null;
+    if (combined) {
+      list.appendChild(subRow('All teams', null, combined));
+      var more = el('p', 'hint');
+      more.appendChild(document.createTextNode('Only want some teams? '));
+      var pick = el('button', 'link', 'Choose teams');
+      pick.type = 'button';
+      pick.addEventListener('click', function () { $('subscribeDialog').close(); setMode('pick'); });
+      more.appendChild(pick);
+      more.appendChild(document.createTextNode(', then subscribe to each one.'));
+      list.appendChild(more);
       return;
     }
     sel.forEach(function (team) {
       var id = calendarFor(team);
-      var row = el('div', 'sub-row');
-      var name = el('h3', null, team.name);
-      var sw = el('span', 'swatch');
-      sw.style.backgroundColor = team.color;
-      sw.setAttribute('aria-hidden', 'true');
-      name.prepend(sw);
-      row.appendChild(name);
-      var btns = el('div', 'sub-buttons');
-      btns.appendChild(linkButton('Add to Google Calendar', gcalUrl(id), true));
-      btns.appendChild(linkButton('Apple Calendar or Outlook', webcalUrl(id), false));
-      var copy = el('button', 'btn', 'Copy link');
-      copy.type = 'button';
-      copy.addEventListener('click', function () { copyText(icsUrl(id), copy); });
-      btns.appendChild(copy);
-      row.appendChild(btns);
-      list.appendChild(row);
+      list.appendChild(subRow(team.name, team.color, { gcal: gcalUrl(id), webcal: webcalUrl(id), ics: icsUrl(id) }));
     });
+  }
+
+  function openShare() {
+    writeHash();
+    $('shareUrl').value = window.location.href;
+    $('shareCopy').textContent = 'Copy link';
+    $('shareDialog').showModal();
+    $('shareUrl').select();
   }
 
   /* ---------- print ---------- */
 
   function updatePrintHeader() {
-    var sel = selectedTeams();
     var h = $('printHeader');
     h.textContent = '';
     h.appendChild(el('h2', null, S.pageTitle));
-    h.appendChild(el('p', 'p-teams', sel.length ? sel.map(function (t) { return t.name; }).join(', ') : 'No teams selected'));
+    h.appendChild(el('p', 'p-teams', teamsLabel(true)));
     if (calendar && calendar.view && calendar.view.title) h.appendChild(el('p', 'p-range', calendar.view.title));
     var printed = new Date().toLocaleDateString('en-US', { timeZone: TZ, month: 'long', day: 'numeric', year: 'numeric' });
     h.appendChild(el('p', null, 'Showing ' + typeLabel() + '. Printed ' + printed + '. ' +
@@ -703,7 +896,7 @@
 
   function updateWeekNote() {
     if (!statusNote) return;
-    statusNote.hidden = !(calendar && calendar.view && calendar.view.type === 'timeGridWeek' && state.teams.size > 4);
+    statusNote.hidden = !(calendar && calendar.view && calendar.view.type === 'timeGridWeek' && selectedTeams().length > 4);
   }
 
   function showRange(from, to) {
@@ -793,7 +986,7 @@
         showEvent(info.event);
       },
       noEventsContent: function () {
-        var msg = !state.teams.size
+        var msg = !selectedTeams().length
           ? 'Choose at least one team to see its schedule.'
           : state.type === 'games'
             ? 'No games or matches in this period. Choose \u201cGames, practices and meetings\u201d to see everything.'
@@ -840,6 +1033,21 @@
       renderSubscribe();
       $('subscribeDialog').showModal();
     });
+    $('shareBtn').addEventListener('click', openShare);
+    $('shareCopy').addEventListener('click', function () {
+      var b = $('shareCopy');
+      var url = $('shareUrl').value;
+      function done() { b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy link'; }, 2000); }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(done, function () {
+          $('shareUrl').select();
+          b.textContent = 'Press Ctrl+C or \u2318C to copy';
+        });
+      } else {
+        $('shareUrl').select();
+        b.textContent = 'Press Ctrl+C or \u2318C to copy';
+      }
+    });
     $('printBtn').addEventListener('click', function () {
       updatePrintHeader();
       window.print();
@@ -861,11 +1069,14 @@
     readHash();
     applySettings();
     buildStatus();
+    wirePicker();
     buildTeamList();
     wireDialogs();
-    syncControls();
-    if (window.matchMedia('(max-width: 800px)').matches) $('filterPanel').open = false;
+    // Someone who chose "Choose teams" but has none picked yet gets the list open, ready to choose.
+    $('picker').open = state.mode === 'pick' && !state.picked.size;
+    writeHash();
     buildCalendar();
+    checkUpcoming();
   }
 
   init();

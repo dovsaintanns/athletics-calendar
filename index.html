@@ -25,47 +25,67 @@
       <a href="links.html">plain list of subscribe links</a>.</p>
   </noscript>
 
-  <div class="layout">
-    <aside class="filters" aria-label="Choose what to show">
-      <details id="filterPanel" open>
-        <summary>Teams and events</summary>
-
-        <fieldset class="show">
-          <legend>Show</legend>
-          <label class="opt"><input type="radio" name="type" value="games"> Games and matches only</label>
-          <label class="opt"><input type="radio" name="type" value="all"> Games, practices and meetings</label>
+  <div class="page">
+    <section class="controls" aria-label="Choose what to show">
+      <div class="choices">
+        <fieldset class="seg">
+          <legend>Teams</legend>
+          <div class="seg-options">
+            <label><input type="radio" name="mode" value="all"><span>All teams</span></label>
+            <label><input type="radio" name="mode" value="pick"><span>Choose teams</span></label>
+          </div>
         </fieldset>
+        <fieldset class="seg">
+          <legend>Show</legend>
+          <div class="seg-options">
+            <label><input type="radio" name="type" value="games"><span>Games and matches</span></label>
+            <label><input type="radio" name="type" value="all"><span>Games, practices and meetings</span></label>
+          </div>
+        </fieldset>
+      </div>
 
-        <div class="teams-head">
-          <h2>Teams</h2>
-          <span class="quick">
-            <button type="button" class="link" id="selectAll">Select all</button>
-            <button type="button" class="link" id="clearAll">Select none</button>
-          </span>
+      <details id="picker" class="picker" hidden>
+        <summary>
+          <span class="picker-title">Your teams</span>
+          <span id="pickSummary" class="pick-summary" aria-live="polite"></span>
+          <span class="picker-toggle" aria-hidden="true"></span>
+        </summary>
+        <div class="picker-body">
+          <div class="picker-tools">
+            <label class="search">
+              <span class="sr-only">Find a team</span>
+              <input type="search" id="teamSearch" placeholder="Find a team, like 7th or track" autocomplete="off" spellcheck="false">
+            </label>
+            <span class="quick">
+              <button type="button" class="link" id="selectAll">Select all</button>
+              <button type="button" class="link" id="clearAll">Select none</button>
+              <button type="button" class="link" id="toggleGroups">Expand all</button>
+            </span>
+          </div>
+          <p id="searchEmpty" class="hint" hidden></p>
+          <div id="teamList" class="team-columns"></div>
         </div>
-        <p class="collapse-row"><button type="button" class="link" id="toggleGroups">Collapse all</button></p>
-        <div id="teamList"></div>
       </details>
-    </aside>
+    </section>
 
     <main class="stage">
-      <div class="actions">
-        <p id="summary" class="summary" aria-live="polite"></p>
+      <div class="toolbar">
+        <div id="viewbar" class="viewbar" role="group" aria-label="Calendar view">
+          <button type="button" data-view="list" aria-pressed="false">List</button>
+          <button type="button" data-view="week" aria-pressed="false">Week</button>
+          <button type="button" data-view="month" aria-pressed="false">Month</button>
+          <button type="button" data-view="full" aria-pressed="false">Full schedule</button>
+          <button type="button" data-view="range" aria-pressed="false">Date range</button>
+        </div>
         <div class="buttons">
           <button type="button" id="subscribeBtn" class="primary">Subscribe</button>
           <button type="button" id="printBtn">Print</button>
+          <button type="button" id="shareBtn">Share</button>
         </div>
       </div>
 
       <div id="status" class="status" role="status" aria-live="polite"></div>
 
-      <div id="viewbar" class="viewbar" role="group" aria-label="Calendar view">
-        <button type="button" data-view="list" aria-pressed="false">List</button>
-        <button type="button" data-view="week" aria-pressed="false">Week</button>
-        <button type="button" data-view="month" aria-pressed="false">Month</button>
-        <button type="button" data-view="full" aria-pressed="false">Full schedule</button>
-        <button type="button" data-view="range" aria-pressed="false">Date range</button>
-      </div>
       <div id="rangeBox" class="range" hidden>
         <label>From <input type="date" id="rangeFrom"></label>
         <label>To <input type="date" id="rangeTo"></label>
@@ -80,7 +100,7 @@
   <footer class="foot">
     <p id="contact"></p>
     <p id="footerNote"></p>
-    <p class="plain-links"><a href="links.html">All subscribe links as a plain list</a></p>
+    <p class="plain-links"><a href="links.html" target="_blank" rel="noopener">All subscribe links as a plain list</a></p>
   </footer>
 
   <dialog id="subscribeDialog" aria-labelledby="subTitle">
@@ -96,6 +116,18 @@
     <p class="hint">Subscribed calendars update on your calendar app's own schedule, which can take several hours.
       This page always shows the latest schedule.</p>
     <div id="subList"></div>
+  </dialog>
+
+  <dialog id="shareDialog" aria-labelledby="shareTitle">
+    <div class="dlg-head">
+      <h2 id="shareTitle">Share this view</h2>
+      <button type="button" class="close" data-close aria-label="Close">Close</button>
+    </div>
+    <p class="hint">Anyone who opens this link sees the same teams, events and view you have now.</p>
+    <div class="share-row">
+      <input type="text" id="shareUrl" readonly aria-label="Link to this view">
+      <button type="button" id="shareCopy" class="primary">Copy link</button>
+    </div>
   </dialog>
 
   <dialog id="eventDialog" aria-labelledby="evTitle">

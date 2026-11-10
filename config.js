@@ -1,7 +1,7 @@
 /*
  * Saint Ann's Athletics Calendar: configuration
  *
- * GENERATED from the athletics admin console Sheet on 2026-10-30 (Site tools > Export site config).
+ * GENERATED from the athletics admin console Sheet on 2026-11-10 (Site tools > Export site config).
  * Change teams and settings in the Sheet and export again; edits made here will be overwritten.
  *
  *  - apiKey:   a read-only Google Calendar API key (restricted by website and by API).
@@ -12,7 +12,7 @@
  * Calendar IDs are not secret: they belong to public calendars.
  */
 window.SA_CONFIG = {
-  apiKey: "AIzaSyBtn8R_trxNdWelHFlUef5EnbK4HRjlsCs",
+  apiKey: "",
 
   settings: {
     pageTitle: "Saint Ann's Athletics Calendar",
@@ -27,7 +27,9 @@ window.SA_CONFIG = {
     feedName: "Saint Ann's Athletics",
     contactText: "Questions about a schedule? Contact the Athletics Office.",
     contactEmail: "support@saintannsny.org",
-    footerNote: "Schedules can change. Check back often."
+    footerNote: "Schedules can change. Check back often.",
+    allTeamsGamesFeed: "c_c6b72ee17141df8b2cfb2bede384a511223713c99960a950f4a8b9a556a7eb6f@group.calendar.google.com",
+    allTeamsAllFeed: "c_bd0d242ca8bb549a8175c245f5de8a07a78599f00818569eb00eb3f4923c1d02@group.calendar.google.com"
   },
 
   teams: [
@@ -90,6 +92,11 @@ window.SA_CONFIG = {
       id: "girls-7th-8th-grade-basketball", active: true, division: "Middle School", sport: "Basketball", name: "Girls 7th/8th Grade Basketball", season: "Winter",
       gamesCalId: "c_efcceab424d3f8478f5cd4ba56e03d981e75832f64afffd5f171aee86c8806c3@group.calendar.google.com",
       allCalId: "c_ac67f503d04c21daade37299e4eedc85c208dae63b0ede8af807fac6c115f326@group.calendar.google.com"
+    },
+    {
+      id: "all-teams-games-feed", active: false, division: "Other", sport: "", name: "All Teams", season: "",
+      gamesCalId: "c_c6b72ee17141df8b2cfb2bede384a511223713c99960a950f4a8b9a556a7eb6f@group.calendar.google.com",
+      allCalId: "c_bd0d242ca8bb549a8175c245f5de8a07a78599f00818569eb00eb3f4923c1d02@group.calendar.google.com"
     }
   ]
 };

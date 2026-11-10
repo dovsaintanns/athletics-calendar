@@ -137,7 +137,9 @@ function siteCfgBuild_(teamValues, settingValues, apiKey, today) {
     feedName: text('Feed Name', "Saint Ann's Athletics"),
     contactText: blankable('Contact Text', ''),
     contactEmail: blankable('Contact Email', ''),
-    footerNote: blankable('Footer Note', '')
+    footerNote: blankable('Footer Note', ''),
+    allTeamsGamesFeed: blankable('All Teams Games Feed', ''),
+    allTeamsAllFeed: blankable('All Teams All Events Feed', '')
   };
 
   if (settings.defaultEventType !== 'games' && settings.defaultEventType !== 'all') {
@@ -151,6 +153,14 @@ function siteCfgBuild_(teamValues, settingValues, apiKey, today) {
   }
   if (settings.contactEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(settings.contactEmail)) {
     errors.push('Settings: "Contact Email" does not look like an email address.');
+  }
+  [['All Teams Games Feed', settings.allTeamsGamesFeed], ['All Teams All Events Feed', settings.allTeamsAllFeed]].forEach(function (f) {
+    if (f[1] && !siteCfgIsFeed_(f[1])) {
+      errors.push('Settings: "' + f[0] + '" must be a Google Calendar ID or a calendar address starting with https:// or webcal:// (got "' + f[1] + '").');
+    }
+  });
+  if (!settings.allTeamsGamesFeed !== !settings.allTeamsAllFeed) {
+    warnings.push('Settings: only one of "All Teams Games Feed" and "All Teams All Events Feed" is filled in. For the other one, Subscribe under "All teams" lists every team separately.');
   }
   if (typeof Intl !== 'undefined') {
     try { new Intl.DateTimeFormat('en-US', { timeZone: settings.timeZone }); }
@@ -300,6 +310,22 @@ function siteCfgSort_(teams) {
   return indexed.map(function (x) { return x.t; });
 }
 
+/** A combined feed may be a Google Calendar ID or a full calendar address. */
+function siteCfgIsFeed_(v) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) || /^(https|webcal):\/\/[^\s"<>]+$/i.test(v);
+}
+
+/** Subscribe links for a feed given as a calendar ID or as an address. */
+function siteCfgFeedLinks_(feed) {
+  if (!/^(https?|webcal):\/\//i.test(feed)) {
+    var ics = 'https://calendar.google.com/calendar/ical/' + encodeURIComponent(feed) + '/public/basic.ics';
+    return { gcal: 'https://calendar.google.com/calendar/r?cid=' + encodeURIComponent(feed), webcal: ics.replace(/^https:/, 'webcal:'), ics: ics };
+  }
+  var https = feed.replace(/^(webcal|http):/i, 'https:');
+  var webcal = https.replace(/^https:/i, 'webcal:');
+  return { gcal: 'https://calendar.google.com/calendar/r?cid=' + encodeURIComponent(webcal), webcal: webcal, ics: https };
+}
+
 function siteCfgSlug_(name) {
   return String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
@@ -331,7 +357,8 @@ function siteCfgRender_(apiKey, settings, teams, today) {
     ['daysBack', settings.daysBack], ['daysAhead', settings.daysAhead],
     ['accentColor', settings.accentColor], ['feedName', settings.feedName],
     ['contactText', settings.contactText], ['contactEmail', settings.contactEmail],
-    ['footerNote', settings.footerNote]
+    ['footerNote', settings.footerNote],
+    ['allTeamsGamesFeed', settings.allTeamsGamesFeed], ['allTeamsAllFeed', settings.allTeamsAllFeed]
   ];
   lines.forEach(function (kv, i) {
     out.push('    ' + kv[0] + ': ' + q(kv[1]) + (i < lines.length - 1 ? ',' : ''));
@@ -371,6 +398,18 @@ function siteCfgRenderLinks_(settings, teams, today) {
       '<a href="' + esc(web(id)) + '">Apple Calendar or Outlook</a>, ' +
       '<a href="' + esc(ics(id)) + '">calendar file (.ics)</a></li>';
   }
+  function feedItem(label, feed) {
+    if (!feed) return '';
+    var l = siteCfgFeedLinks_(feed);
+    return '<li><strong>' + label + ':</strong> <a href="' + esc(l.gcal) + '">Google Calendar</a>, ' +
+      '<a href="' + esc(l.webcal) + '">Apple Calendar or Outlook</a>, ' +
+      '<a href="' + esc(l.ics) + '">calendar file (.ics)</a></li>';
+  }
+  var allTeams = (settings.allTeamsGamesFeed || settings.allTeamsAllFeed)
+    ? '<h2>All teams</h2>\n<p>One subscription with every team\'s schedule.</p>\n<ul>' +
+      feedItem('Games and matches only', settings.allTeamsGamesFeed) +
+      feedItem('Games, practices and meetings', settings.allTeamsAllFeed) + '</ul>\n'
+    : '';
 
   var body = divisions.map(function (div) {
     var inDiv = active.filter(function (t) { return t.division === div; });
@@ -410,7 +449,7 @@ function siteCfgRenderLinks_(settings, teams, today) {
 '<h1>Subscribe links</h1>\n' +
 '<p class="back"><a href="index.html">Back to the calendar</a></p>\n' +
 '<p>Add a team\'s schedule to your own calendar app. Your app refreshes subscribed calendars on its own schedule, which can take several hours.</p>\n' +
-body + '\n' +
+allTeams + body + '\n' +
 '<p style="margin-top:2.5rem">' + esc(settings.footerNote || '') + '</p>\n' +
 '</body>\n' +
 '</html>\n';
