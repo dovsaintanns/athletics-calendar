@@ -872,6 +872,10 @@
   function updatePrintHeader() {
     var h = $('printHeader');
     h.textContent = '';
+    var logo = el('img', 'p-logo');
+    logo.src = 'assets/sa-athletics-logo.png';
+    logo.alt = 'Saint Ann\u2019s Athletics';
+    h.appendChild(logo);
     h.appendChild(el('h2', null, S.pageTitle));
     h.appendChild(el('p', 'p-teams', teamsLabel(true)));
     if (calendar && calendar.view && calendar.view.title) h.appendChild(el('p', 'p-range', calendar.view.title));
@@ -991,7 +995,15 @@
           : state.type === 'games'
             ? 'No games or matches in this period. Choose \u201cGames, practices and meetings\u201d to see everything.'
             : 'Nothing scheduled in this period.';
-        return { domNodes: [document.createTextNode(msg)] };
+        var wrap = el('div', 'empty');
+        var owl = el('img', 'empty-owl');
+        owl.src = 'assets/owl-sneakers.png';
+        owl.alt = '';                      // decorative
+        owl.width = 120;
+        owl.height = 138;
+        wrap.appendChild(owl);
+        wrap.appendChild(el('p', null, msg));
+        return { domNodes: [wrap] };
       },
       loading: function (isLoading) {
         statusLoading.hidden = !isLoading;
@@ -1066,6 +1078,12 @@
   }
 
   function init() {
+    // Show the Saint Ann's Athletics logo only when the page is opened on its own.
+    // Inside the WordPress frame the school site's own header already carries the branding.
+    var standalone = true;
+    try { standalone = window.self === window.top; } catch (e) { standalone = false; }
+    document.documentElement.classList.toggle('standalone', standalone);
+
     readHash();
     applySettings();
     buildStatus();

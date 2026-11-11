@@ -46,6 +46,11 @@ a:hover { text-decoration-thickness: 2px; }
 .masthead, .page, .foot { max-width: 1440px; margin: 0 auto; padding-left: 1.25rem; padding-right: 1.25rem; }
 
 .masthead { padding-top: 1.75rem; padding-bottom: 1rem; }
+
+/* Logo: shown only when the page is opened directly, not inside the WordPress frame (see app.js). */
+.brand { display: none; height: 60px; width: auto; margin: 0 0 1rem; }
+.standalone .brand { display: block; }
+@media (max-width: 800px) { .brand { height: 44px; margin-bottom: .75rem; } }
 .masthead h1 {
   margin: 0;
   font-family: var(--serif);
@@ -233,7 +238,10 @@ button.link, button.link:hover { background: none; border: 0; padding: 0; font-w
 #calendar .fc-list-day th { background: var(--wash); }
 #calendar .fc-list-event { cursor: pointer; }
 #calendar .fc-list-event-time { white-space: nowrap; color: var(--muted); width: 10rem; }
-#calendar .fc-list-empty { padding: 2.5rem 1rem; color: var(--muted); }
+#calendar .fc-list-empty { padding: 2rem 1rem; color: var(--muted); }
+.empty { display: flex; flex-direction: column; align-items: center; gap: .75rem; text-align: center; }
+.empty p { margin: 0; max-width: 40ch; }
+.empty-owl { width: 96px; height: auto; opacity: .85; }
 #calendar .fc-event { cursor: pointer; }
 #calendar .fc-daygrid-event { font-size: .82rem; }
 #calendar .fc-daygrid-dot-event { align-items: flex-start; }
@@ -344,10 +352,12 @@ input.manual { font: inherit; font-size: .85rem; padding: .4rem .5rem; width: 10
   .skip, .masthead, .controls, .toolbar, .status, .range, .plain-links, noscript, dialog,
   #calendar .fc-toolbar { display: none !important; }
   .page { display: block; padding: 0; max-width: none; }
+  .empty-owl { display: none; }
   .print-only { display: block; margin-bottom: .75rem; border-bottom: 2px solid #000; padding-bottom: .5rem; }
   .print-only h2 { margin: 0 0 .25rem; font-family: var(--serif); font-size: 18pt; }
   .print-only p { margin: .1rem 0; font-size: 10pt; }
   .print-only .p-teams { font-weight: 600; font-size: 11pt; }
+  .print-only .p-logo { display: block; height: 40px; width: auto; margin-bottom: 6pt; }
   .print-only .p-range { font-weight: 600; font-size: 11pt; }
   #calendar { --fc-border-color: #888; --fc-today-bg-color: transparent; }
   #calendar .fc-list-day th { background: #eee !important; }
