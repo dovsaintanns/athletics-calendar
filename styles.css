@@ -48,9 +48,11 @@ a:hover { text-decoration-thickness: 2px; }
 .masthead { padding-top: 1.75rem; padding-bottom: 1rem; }
 
 /* Logo: shown only when the page is opened directly, not inside the WordPress frame (see app.js). */
-.brand { display: none; height: 60px; width: auto; margin: 0 0 1rem; }
+.brand { display: none; height: 96px; width: auto; max-width: 100%; margin: 0 0 .5rem; }
 .standalone .brand { display: block; }
-@media (max-width: 800px) { .brand { height: 44px; margin-bottom: .75rem; } }
+/* With the logo showing, the page title stays for screen readers but isn't repeated visually. */
+.standalone .masthead h1 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@media (max-width: 800px) { .brand { height: 64px; } }
 .masthead h1 {
   margin: 0;
   font-family: var(--serif);
@@ -60,7 +62,7 @@ a:hover { text-decoration-thickness: 2px; }
   letter-spacing: -0.01em;
   color: var(--accent);
 }
-.intro { margin: .5rem 0 0; color: var(--muted); max-width: 60ch; }
+.intro { margin: .5rem 0 0; color: var(--muted); }
 
 .page { padding-bottom: 2rem; }
 
@@ -235,7 +237,9 @@ button.link, button.link:hover { background: none; border: 0; padding: 0; font-w
   font-family: var(--serif); font-size: 1.35rem; font-weight: 600; color: var(--ink);
 }
 #calendar .fc-list-day-cap, #calendar .fc-list-day-text, #calendar .fc-list-day-side-text { color: var(--ink); }
-#calendar .fc-list-day th { background: var(--wash); }
+#calendar .fc-list-day th { background: var(--wash); text-align: left; }
+#calendar .fc-list-day-cushion { display: block; }
+#calendar .fc-list-day-text { font-weight: 600; }
 #calendar .fc-list-event { cursor: pointer; }
 #calendar .fc-list-event-time { white-space: nowrap; color: var(--muted); width: 10rem; }
 #calendar .fc-list-empty { padding: 2rem 1rem; color: var(--muted); }
@@ -283,9 +287,10 @@ button.link, button.link:hover { background: none; border: 0; padding: 0; font-w
 .range input { font: inherit; font-weight: 400; padding: .3rem .45rem; border: 1.5px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--ink); }
 .range-msg { color: var(--problem-ink); font-size: .9rem; }
 
-#calendar.is-range .fc-prev-button,
-#calendar.is-range .fc-next-button,
-#calendar.is-range .fc-today-button { display: none; }
+#calendar.is-fixed .fc-prev-button,
+#calendar.is-fixed .fc-next-button,
+#calendar.is-fixed .fc-today-button { display: none; }
+#calendar.is-fixed .fc-toolbar-chunk:first-child:empty { display: none; }
 
 #calendar .fc-timegrid-event { overflow: hidden; }
 .evg { display: block; line-height: 1.25; overflow: hidden; padding: 1px 3px; overflow-wrap: anywhere; }

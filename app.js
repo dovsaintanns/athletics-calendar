@@ -25,8 +25,9 @@
   var PALETTE = ['#1f5f8b', '#a23b72', '#2e7d32', '#b34a12', '#6a4c93', '#00796b',
                  '#9c2f2f', '#5d6d1f', '#3b4a9e', '#8d5a00', '#455a64', '#ad1457'];
 
-  var VIEW_FROM_SHORT = { list: 'listMonth', week: 'timeGridWeek', month: 'dayGridMonth', full: 'listFull', range: 'listRange' };
-  var VIEW_TO_SHORT = { listMonth: 'list', timeGridWeek: 'week', listWeek: 'week', dayGridMonth: 'month', listFull: 'full', listRange: 'range' };
+  // "list" is the whole upcoming schedule. Older links that say view=full open the same list.
+  var VIEW_FROM_SHORT = { list: 'listAll', full: 'listAll', week: 'timeGridWeek', month: 'dayGridMonth', range: 'listRange' };
+  var VIEW_TO_SHORT = { listAll: 'list', timeGridWeek: 'week', listWeek: 'week', dayGridMonth: 'month', listRange: 'range' };
   var YMD = /^\d{4}-\d{2}-\d{2}$/;
 
   var teams = [];
@@ -82,7 +83,7 @@
   /* ---------- state (kept in the page address so links can be shared) ---------- */
 
   // mode "all": every active team. mode "pick": only the teams in state.picked.
-  var state = { mode: 'all', picked: new Set(), type: 'games', view: 'listMonth', rangeFrom: '', rangeTo: '' };
+  var state = { mode: 'all', picked: new Set(), type: 'games', view: 'listAll', rangeFrom: '', rangeTo: '' };
   var STORE_KEY = 'saAthleticsCalendar.v1';
 
   function defaultSelection() {
@@ -128,12 +129,12 @@
     state.type = (type === 'all' || type === 'games') ? type : (S.defaultEventType === 'all' ? 'all' : 'games');
 
     var v = p.get('view');
-    var view = VIEW_FROM_SHORT[v] || VIEW_FROM_SHORT[S.defaultView] || 'listMonth';
+    var view = VIEW_FROM_SHORT[v] || VIEW_FROM_SHORT[S.defaultView] || 'listAll';
     if (view === 'timeGridWeek' && isNarrow()) view = 'listWeek';   // a 7-column grid is too cramped on phones
     var from = p.get('from') || '';
     var to = p.get('to') || '';
     if (YMD.test(from) && YMD.test(to) && from <= to) { state.rangeFrom = from; state.rangeTo = to; }
-    if (view === 'listRange' && !state.rangeFrom) view = 'listMonth';
+    if (view === 'listRange' && !state.rangeFrom) view = 'listAll';
     state.view = view;
   }
 
@@ -942,7 +943,12 @@
       headerToolbar: { left: 'prev,next today', center: 'title', right: '' },
       buttonText: { today: 'Today' },
       views: {
-        listMonth: {},
+        // The whole schedule from today on, as far ahead as the calendars are read.
+        listAll: {
+          type: 'list',
+          visibleRange: function () { return { start: todayStr(), end: addDays(todayStr(), S.daysAhead || 365) }; },
+          titleFormat: function () { return 'Upcoming schedule'; }
+        },
         listWeek: {},
         timeGridWeek: {
           slotMinTime: '06:00:00', slotMaxTime: '23:00:00', slotDuration: '00:30:00',
@@ -950,7 +956,6 @@
           slotEventOverlap: false, displayEventEnd: false
         },
         dayGridMonth: {},
-        listFull: { type: 'list', duration: { days: 365 } },
         listRange: {
           type: 'list',
           visibleRange: function () {
@@ -964,6 +969,9 @@
           end: new Date(nowDate.getTime() + (S.daysAhead || 365) * DAY)
         };
       },
+      // List views: weekday and date together on the left ("Tuesday, November 10"), nothing on the right.
+      listDayFormat: { weekday: 'long', month: 'long', day: 'numeric' },
+      listDaySideFormat: false,
       eventInteractive: true,
       dayMaxEvents: 3,
       eventTimeFormat: { hour: 'numeric', minute: '2-digit', meridiem: 'short' },
@@ -1023,7 +1031,8 @@
           $('rangeFrom').value = state.rangeFrom;
           $('rangeTo').value = state.rangeTo;
         }
-        $('calendar').classList.toggle('is-range', v.type === 'listRange');
+        // The full list and a custom range have nothing to step through, so no prev/next/today.
+        $('calendar').classList.toggle('is-fixed', v.type === 'listRange' || v.type === 'listAll');
         updateViewbar();
         updateWeekNote();
         writeHash();

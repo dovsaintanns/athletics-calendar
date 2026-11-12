@@ -26,7 +26,7 @@ It only works for calendars that are already public.
 4. Edit the key and restrict it:
    - **Application restrictions:** Websites. Add `https://YOURNAME.github.io/*` for testing. Later add the school site, for example `https://www.saintannsny.org/*`.
    - **API restrictions:** Restrict key, then choose only **Google Calendar API**.
-5. Paste the key into `apiKey` in `config.js`.
+5. Add a row to the admin Sheet's **Settings** tab named **API Key** and paste the key next to it. The export writes it into `config.js` every time.
 
 The key is visible to anyone who views the page source. That is normal for this kind of key. The two restrictions above are what keep it from being useful elsewhere.
 
@@ -74,7 +74,7 @@ With these filled in, **Subscribe** under "All teams" offers a single subscripti
 
 ## Views on the page
 
-List (a month at a time), Week (a time grid on computers, a list on phones), Month, Full schedule (about a year ahead), and Date range (pick any two dates, handy for printing a stretch of the season). Every view works with the Subscribe and Print buttons. The page address records the selection, and the **Share** button gives a link that opens the same teams and view. When the page is embedded, that link points to the calendar's own address (it opens full screen), because the WordPress page's address can't carry the selection into the frame.
+List (the whole schedule from today on, with the day of the week beside each date), Week (a time grid on computers, a list on phones), Month, and Date range (pick any two dates, handy for printing a stretch of the season). Older links that ask for the former "Full schedule" view open the List. Every view works with the Subscribe and Print buttons. The page address records the selection, and the **Share** button gives a link that opens the same teams and view. When the page is embedded, that link points to the calendar's own address (it opens full screen), because the WordPress page's address can't carry the selection into the frame.
 
 ## Moving to another host (WordPress server, school web host, etc.)
 
